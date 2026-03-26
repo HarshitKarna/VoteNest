@@ -1,6 +1,5 @@
 /* This file handles scroll-triggered animations for poll/dashboard tiles
-   using the IntersectionObserver API. Page-specific JS (timers, voting,
-   modals, form validation) lives inline in each PHP file instead.
+   using the IntersectionObserver API.
    IntersectionObserver watches for tiles entering the viewport.
    When a tile becomes visible, it fades in and slides up.
    Once animated, the tile is unobserved so the effect only plays once. */

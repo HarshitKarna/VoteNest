@@ -247,7 +247,7 @@
           const isWinner   = place === 0 && isEnded;
           const isMyVote   = userVoteOptionId === opt.id;
           const trophy     = isEnded ? (trophies[place] ?? (place+1)+".") : (place+1)+".";
-          const yourPick   = isMyVote ? `<span class="your-pick-label">your pick</span>` : "";
+          const yourPick   = isMyVote ? `<span class="your-pick-label"> - your pick</span>` : "";
           const winnerBar  = isWinner ? "winner-bar" : "";
           html += `<div class="result-row ${isWinner?"result-winner":""}" style="animation-delay:${place*0.08}s">
             <div class="result-label">

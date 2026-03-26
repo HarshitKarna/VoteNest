@@ -244,13 +244,11 @@ a { color: inherit; text-decoration: none; }
     display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 18px;
 }
-
 /* =============================================================================
    POLL TILES (Poll List page)
    Glassy dark cards — semi-transparent background + blur gives the glass feel.
    A faint purple radial glow fades in on hover for a premium touch.
    ============================================================================= */
-
 .poll-tile {
     position: relative; overflow: hidden;
     /* Layered gradient creates depth; slight transparency lets bg bleed through */

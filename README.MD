@@ -6,9 +6,9 @@ Also, not very important but, there is a master admin user id with capability to
 
 Known issues:
 
--For poll options with descriptions, there is "i" icon visible with each option tile while voting. it is supposed to open a window that shows the description. But, as of right now, clicking "i" does nothing. Console ERROR: Uncaught SyntaxError: Unexpected end of input (at view_poll.html?code=48889515:1:34)
+-The "Loading Poll" disappears way before the objects actually appear in the page. This causes there to be a ~2 second time delay between loading disappearing and the contents actually appearing. Problem exists in: poll list, viewing poll and dashboard. Somewhat fixed in certain places.
 
--The "Loading Poll" disappears way before the objects actually appear in the page. This causes there to be a ~2 second time delay between loading disappearing and the contents actually appearing. Problem exists in: poll list, viewing poll and dashboard.
+-Since the project gets edits often, the css might not refresh despite other html+js having their changes rolled out. performance browser thing where they avoid reloading large css files multiple times. can cause the style to look weird just after an update. use <pre>CTRL+F5</pre> to fix
 
 ------------------------------------------------------------------------------------------------------
 

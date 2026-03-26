@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create Poll &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap">
+  <div class="page-header"><h1 class="page-title">Create a Poll</h1></div>
+  <div class="create-card">
+
+    <!-- Step 1: descriptions? -->
+    <div id="step-desc-ask" class="desc-ask-screen">
+      <div class="desc-ask-icon">&#128221;</div>
+      <h2>Add descriptions to options?</h2>
+      <p>Give each option a short write-up (up to 250 words) to help voters choose.</p>
+      <div class="desc-ask-btns">
+        <button class="btn btn-primary"   onclick="startForm(true)">Yes, add descriptions</button>
+        <button class="btn btn-secondary" onclick="startForm(false)">No, keep it simple</button>
+      </div>
+    </div>
+
+    <!-- Step 2: the form -->
+    <form id="create-form" style="display:none;">
+      <input type="hidden" id="has_desc_input" value="0">
+
+      <div class="form-section">
+        <label class="form-label">Poll Title</label>
+        <input type="text" id="pollTitle" class="form-input" placeholder="e.g. Best Programming Language" required>
+      </div>
+      <div class="form-section">
+        <label class="form-label">Question</label>
+        <textarea id="pollQuestion" class="form-input form-textarea" placeholder="What do you want to ask?" required></textarea>
+      </div>
+      <div class="form-section">
+        <div class="options-header">
+          <label class="form-label">Options <span id="opt-count-label">(4)</span></label>
+          <div class="options-controls">
+            <button type="button" class="opt-ctrl-btn" onclick="removeOption()">&#8722;</button>
+            <button type="button" class="opt-ctrl-btn" onclick="addOption()">&#65291;</button>
+          </div>
+        </div>
+        <div id="options-list"></div>
+      </div>
+      <div class="form-section form-row">
+        <div class="form-group-half">
+          <label class="form-label">Duration (minutes)</label>
+          <input type="number" id="pollDuration" class="form-input" placeholder="e.g. 60" min="1" required>
+        </div>
+        <div class="form-group-half" style="display:flex;align-items:center;padding-top:22px;">
+          <label class="show-results-label">
+            <div class="toggle-wrap">
+              <input type="checkbox" id="show_results" class="toggle-input">
+              <span class="toggle-slider"></span>
+            </div>
+            Show results to voters
+          </label>
+        </div>
+      </div>
+      <div class="auth-error" id="createError" style="display:none;margin-bottom:12px;"></div>
+      <button type="submit" class="btn btn-primary btn-full" id="createBtn">Create Poll</button>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+  import { db, getCurrentUser, renderNav, getBase } from "../config/app.js";
+  import {
+    collection, doc, setDoc, addDoc, getDocs, query, where, serverTimestamp, Timestamp
+  } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base = getBase();
+  await renderNav();
+
+  // Must be logged in
+  const user = await getCurrentUser();
+  if (!user) { window.location.href = base + "/auth/login.html"; }
+
+  document.getElementById("create-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const errBox = document.getElementById("createError");
+    errBox.style.display = "none";
+
+    const title       = document.getElementById("pollTitle").value.trim();
+    const question    = document.getElementById("pollQuestion").value.trim();
+    const minutes     = parseInt(document.getElementById("pollDuration").value);
+    const showResults = document.getElementById("show_results").checked;
+
+    if (!title || !question || !minutes) {
+      errBox.textContent = "Please fill in all fields.";
+      errBox.style.display = "block"; return;
+    }
+
+    // Collect options
+    const optionInputs = document.querySelectorAll("#options-list input[type=text]");
+    const descTextareas = document.querySelectorAll("#options-list textarea");
+    const options = [];
+    optionInputs.forEach((inp, i) => {
+      const text = inp.value.trim();
+      if (text) options.push({ text, desc: descTextareas[i]?.value.trim() || "" });
+    });
+    if (options.length < 2) {
+      errBox.textContent = "Please add at least 2 options.";
+      errBox.style.display = "block"; return;
+    }
+
+    const btn = document.getElementById("createBtn");
+    btn.textContent = "Creating…"; btn.disabled = true;
+
+    try {
+      // Generate unique 8-digit code
+      let code, exists = true;
+      while (exists) {
+        code = String(Math.floor(Math.random() * 100000000)).padStart(8,"0");
+        const snap = await getDocs(query(collection(db,"polls"), where("code","==",code)));
+        exists = !snap.empty;
+      }
+
+      const endTime = new Date(Date.now() + minutes * 60000);
+
+      // Create poll doc (doc ID = code)
+      await setDoc(doc(db, "polls", code), {
+        code,
+        title,
+        question,
+        creator_email: user.email,
+        show_results:  showResults,
+        status:        "active",
+        created_at:    Timestamp.fromDate(new Date()),
+        end_time:      Timestamp.fromDate(endTime)
+      });
+
+      // Create options
+      for (const opt of options) {
+        await addDoc(collection(db, "options"), {
+          poll_code:        code,
+          option_text:      opt.text,
+          description:      opt.desc,
+          is_disqualified:  false,
+          disqualify_reason: null
+        });
+      }
+
+      window.location.href = base + "/admin/dashboard.html";
+    } catch (err) {
+      errBox.textContent   = "Error: " + err.message;
+      errBox.style.display = "block";
+      btn.textContent = "Create Poll"; btn.disabled = false;
+    }
+  });
+</script>
+<script>
+  var withDesc = false, optCount = 4, MAX = 10, MIN = 2;
+
+  function startForm(useDesc) {
+    withDesc = useDesc;
+    document.getElementById("has_desc_input").value = useDesc ? "1" : "0";
+    document.getElementById("step-desc-ask").style.display = "none";
+    document.getElementById("create-form").style.display   = "block";
+    var list = document.getElementById("options-list"); list.innerHTML = "";
+    for (var i = 0; i < 4; i++) addOptionEl(i);
+    updateCount();
+  }
+  function addOption()    { if (optCount >= MAX) return; addOptionEl(optCount); optCount++; updateCount(); }
+  function removeOption() {
+    if (optCount <= MIN) return;
+    document.getElementById("options-list").removeChild(
+      document.getElementById("options-list").lastElementChild);
+    optCount--; updateCount();
+  }
+  function updateCount() {
+    document.getElementById("opt-count-label").textContent = "(" + optCount + ")";
+    document.getElementById("options-list").querySelectorAll(".option-block").forEach(function(el,i) {
+      el.querySelector(".option-num").textContent          = (i+1) + ".";
+      el.querySelector("input[type=text]").name            = "options[" + i + "]";
+      var ta = el.querySelector("textarea");
+      if (ta) ta.name = "descriptions[" + i + "]";
+    });
+  }
+  function addOptionEl(index) {
+    var list = document.getElementById("options-list");
+    var block = document.createElement("div"); block.className = "option-block";
+    block.innerHTML =
+      '<div class="option-row"><span class="option-num">' + (index+1) + '.</span>'
+      + '<input type="text" name="options[' + index + ']" class="form-input" placeholder="Option ' + (index+1) + '"></div>'
+      + (withDesc
+          ? '<div class="desc-row"><textarea name="descriptions[' + index + ']" class="form-input desc-textarea"'
+            + ' placeholder="Description for option ' + (index+1) + ' (max 250 words)" oninput="countWords(this)"></textarea>'
+            + '<div class="word-counter"><span class="wc-count">0</span> / 250 words</div></div>'
+          : "");
+    list.appendChild(block);
+  }
+  function countWords(ta) {
+    var words = ta.value.trim().split(/\s+/).filter(function(w){ return w.length > 0; });
+    if (words.length > 250) { ta.value = words.slice(0,250).join(" "); words = words.slice(0,250); }
+    ta.parentElement.querySelector(".wc-count").textContent = words.length;
+    ta.parentElement.querySelector(".word-counter").classList.toggle("over-limit", words.length >= 250);
+  }
+</script>
+</body>
+</html>

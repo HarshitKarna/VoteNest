@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Register &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="auth-page">
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h2 class="auth-title">Create account</h2>
+    <p class="auth-subtitle">Join to start voting and creating polls</p>
+
+    <div class="auth-error"   id="serverError"  style="display:none;"></div>
+    <div class="auth-success" id="serverSuccess" style="display:none;"></div>
+
+    <form class="auth-form" id="regForm" novalidate>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        <span class="field-error" id="emailError"></span>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="password" placeholder="Min. 6 characters" autocomplete="new-password">
+          <button type="button" class="toggle-pw" onclick="togglePw('password',this)" tabindex="-1">Show</button>
+        </div>
+        <span class="field-error" id="passwordError"></span>
+      </div>
+      <div class="form-group">
+        <label for="confirm">Confirm Password</label>
+        <div class="input-wrap">
+          <input type="password" id="confirm" placeholder="Repeat password" autocomplete="new-password">
+          <button type="button" class="toggle-pw" onclick="togglePw('confirm',this)" tabindex="-1">Show</button>
+        </div>
+        <span class="field-error" id="confirmError"></span>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="regBtn">Create Account</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="login.html">Already have an account? Login</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { auth, db, renderNav, getBase, getCurrentUser }
+    from "../config/app.js";
+  import { createUserWithEmailAndPassword }
+    from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+  import { doc, setDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base = getBase();
+  getCurrentUser().then(u => { if (u) window.location.href = base + "/index.html"; });
+  await renderNav();
+
+  const form          = document.getElementById("regForm");
+  const emailInput    = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const confirmInput  = document.getElementById("confirm");
+  const serverError   = document.getElementById("serverError");
+  const serverSuccess = document.getElementById("serverSuccess");
+
+  emailInput.addEventListener("input",    () => validateEmail(false));
+  passwordInput.addEventListener("input", () => { validatePassword(false); if(confirmInput.value) validateConfirm(false); });
+  confirmInput.addEventListener("input",  () => validateConfirm(false));
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    serverError.style.display   = "none";
+    serverSuccess.style.display = "none";
+    if (!validateEmail(true) | !validatePassword(true) | !validateConfirm(true)) return;
+
+    const btn = document.getElementById("regBtn");
+    btn.textContent = "Creating account…"; btn.disabled = true;
+
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        auth, emailInput.value.trim(), passwordInput.value);
+
+      // Create a Firestore user doc (is_master_admin defaults to false for new users)
+      await setDoc(doc(db, "users", cred.user.email), {
+        email:           cred.user.email,
+        is_master_admin: false,
+        created_at:      serverTimestamp()
+      });
+
+      serverSuccess.textContent    = "Account created! Redirecting…";
+      serverSuccess.style.display  = "block";
+      setTimeout(() => window.location.href = base + "/index.html", 1200);
+    } catch (err) {
+      const msg = err.code === "auth/email-already-in-use"
+        ? "That email is already registered."
+        : err.message;
+      serverError.textContent   = msg;
+      serverError.style.display = "block";
+      btn.textContent = "Create Account"; btn.disabled = false;
+    }
+  });
+
+  function validateEmail(show) {
+    const val = emailInput.value.trim();
+    if (!val) { if(show) setErr("emailError","Email is required.",emailInput); return false; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { if(show) setErr("emailError","Enter a valid email.",emailInput); return false; }
+    setErr("emailError",""); emailInput.classList.remove("input-invalid"); return true;
+  }
+  function validatePassword(show) {
+    const val = passwordInput.value;
+    if (!val) { if(show) setErr("passwordError","Password is required.",passwordInput); return false; }
+    if (val.length < 6) { if(show) setErr("passwordError","Min 6 characters.",passwordInput); return false; }
+    setErr("passwordError",""); passwordInput.classList.remove("input-invalid"); return true;
+  }
+  function validateConfirm(show) {
+    const val = confirmInput.value;
+    if (!val) { if(show) setErr("confirmError","Please confirm your password.",confirmInput); return false; }
+    if (val !== passwordInput.value) { if(show) setErr("confirmError","Passwords do not match.",confirmInput); return false; }
+    setErr("confirmError",""); confirmInput.classList.remove("input-invalid"); return true;
+  }
+  function setErr(id, msg, input) {
+    document.getElementById(id).textContent = msg;
+    if (input) input.classList.toggle("input-invalid", msg !== "");
+  }
+</script>
+<script>
+  function togglePw(id, btn) {
+    const input = document.getElementById(id);
+    input.type = input.type === "password" ? "text" : "password";
+    btn.textContent = input.type === "password" ? "Show" : "Hide";
+  }
+</script>
+</body>
+</html>

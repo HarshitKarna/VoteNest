@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="auth-page">
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <h2 class="auth-title">Welcome back</h2>
+    <p class="auth-subtitle">Sign in to your account</p>
+
+    <div class="auth-error" id="serverError" style="display:none;"></div>
+    <div class="auth-error" id="jsError"     style="display:none;"></div>
+
+    <form class="auth-form" id="loginForm" novalidate>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        <span class="field-error" id="emailError"></span>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+          <button type="button" class="toggle-pw" onclick="togglePw('password',this)" tabindex="-1">Show</button>
+        </div>
+        <span class="field-error" id="passwordError"></span>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" id="loginBtn">Sign In</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="register.html">Don't have an account? Register</a>
+      <a id="homeLink" href="#">&larr; Back to Home</a>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { auth, renderNav, getBase, getCurrentUser }
+    from "../config/app.js";
+  import { signInWithEmailAndPassword }
+    from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+
+  const base = getBase();
+  document.getElementById("homeLink").href = base + "/index.html";
+
+  // Redirect if already logged in
+  getCurrentUser().then(user => { if (user) window.location.href = base + "/index.html"; });
+
+  await renderNav();
+
+  const form          = document.getElementById("loginForm");
+  const emailInput    = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const serverError   = document.getElementById("serverError");
+
+  emailInput.addEventListener("input",    () => validateEmail(false));
+  passwordInput.addEventListener("input", () => validatePassword(false));
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    serverError.style.display = "none";
+    const emailOk = validateEmail(true);
+    const passOk  = validatePassword(true);
+    if (!emailOk || !passOk) return;
+
+    const btn = document.getElementById("loginBtn");
+    btn.textContent = "Signing in…"; btn.disabled = true;
+
+    try {
+      await signInWithEmailAndPassword(auth, emailInput.value.trim(), passwordInput.value);
+      window.location.href = base + "/index.html";
+    } catch (err) {
+      const msg = err.code === "auth/invalid-credential" || err.code === "auth/user-not-found"
+        ? "Invalid email or password."
+        : err.message;
+      serverError.textContent    = msg;
+      serverError.style.display  = "block";
+      btn.textContent = "Sign In"; btn.disabled = false;
+    }
+  });
+
+  function validateEmail(show) {
+    const val = emailInput.value.trim();
+    if (!val) { if(show) setErr("emailError","Email is required.",emailInput); return false; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) { if(show) setErr("emailError","Enter a valid email.",emailInput); return false; }
+    setErr("emailError",""); emailInput.classList.remove("input-invalid"); return true;
+  }
+  function validatePassword(show) {
+    const val = passwordInput.value;
+    if (!val) { if(show) setErr("passwordError","Password is required.",passwordInput); return false; }
+    if (val.length < 6) { if(show) setErr("passwordError","Min 6 characters.",passwordInput); return false; }
+    setErr("passwordError",""); passwordInput.classList.remove("input-invalid"); return true;
+  }
+  function setErr(id, msg, input) {
+    document.getElementById(id).textContent = msg;
+    if (input) input.classList.toggle("input-invalid", msg !== "");
+  }
+</script>
+<script>
+  function togglePw(id, btn) {
+    const input = document.getElementById(id);
+    input.type = input.type === "password" ? "text" : "password";
+    btn.textContent = input.type === "password" ? "Show" : "Hide";
+  }
+</script>
+</body>
+</html>

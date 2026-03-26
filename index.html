@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoteNest</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="landing-page">
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="landing-hero">
+  <div class="hero-bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="hero-header">
+    <h1 class="hero-title">Vote <span class="hero-accent">Nest</span></h1>
+    <p class="hero-subtitle">Create polls. Cast votes. See results.</p>
+  </div>
+
+  <div class="hero-tiles">
+    <!-- Tile 1: Browse -->
+    <a href="" id="browseTile" class="hero-tile tile-browse">
+      <div class="tile-float-bg"></div>
+      <div class="tile-icon">&#128499;</div>
+      <h2 class="tile-title">Browse Polls</h2>
+      <p class="tile-desc">Explore all active and past polls. View options, results, and participate.</p>
+      <span class="tile-cta">Explore &rarr;</span>
+    </a>
+
+    <!-- Tile 2: Login / Signed In (filled by JS) -->
+    <div id="accountTile" class="hero-tile tile-account">
+      <div class="tile-float-bg"></div>
+      <div class="tile-icon" id="accountIcon">&#128273;</div>
+      <h2 class="tile-title" id="accountTitle">Login / Register</h2>
+      <p class="tile-desc"  id="accountDesc">Sign in to vote on polls and create your own. New here? Register in seconds.</p>
+      <span id="accountCta"></span>
+    </div>
+
+    <!-- Tile 3: Create -->
+    <a href="" id="createTile" class="hero-tile tile-create">
+      <div class="tile-float-bg"></div>
+      <div class="tile-icon">&#9889;</div>
+      <h2 class="tile-title">Create a Poll</h2>
+      <p class="tile-desc">Build your own poll with custom options, time limits, and result visibility controls.</p>
+      <span class="tile-cta">Start Building &rarr;</span>
+    </a>
+  </div>
+</div>
+
+<script src="assets/script.js"></script>
+<script type="module">
+  import { getCurrentUser, renderNav, getBase, logout } from "./config/app.js";
+
+  async function init() {
+    await renderNav();
+    const user = await getCurrentUser();
+    const base = getBase();
+
+    document.getElementById("browseTile").href = base + "/polls/poll_list.html";
+
+    if (user) {
+      // Signed-in tile
+      const tile = document.getElementById("accountTile");
+      tile.classList.add("tile-loggedin");
+      document.getElementById("accountIcon").textContent  = "✓";
+      document.getElementById("accountTitle").textContent = "Signed In";
+      document.getElementById("accountDesc").innerHTML    =
+        `You're logged in as <strong>${user.email}</strong>`;
+      const btn = document.createElement("a");
+      btn.href = "#"; btn.className = "tile-cta-btn"; btn.textContent = "Logout";
+      btn.addEventListener("click", async e => { e.preventDefault(); await logout(); });
+      document.getElementById("accountCta").replaceWith(btn);
+
+      document.getElementById("createTile").href = base + "/polls/create_poll.html";
+    } else {
+      // Guest tile — make whole tile clickable to login
+      const tile = document.getElementById("accountTile");
+      tile.style.cursor = "pointer";
+      tile.addEventListener("click", () => window.location.href = base + "/auth/login.html");
+      document.getElementById("accountCta").outerHTML =
+        `<span class="tile-cta">Get Started &rarr;</span>`;
+
+      document.getElementById("createTile").href = base + "/auth/login.html";
+    }
+  }
+  init();
+</script>
+</body>
+</html>

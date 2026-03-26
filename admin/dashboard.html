@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" id="dashTitle">My Polls</h1>
+    </div>
+    <a id="newPollBtn" href="#" class="btn btn-primary">+ New Poll</a>
+  </div>
+  <div id="loadingState" class="loading-state">
+  <div class="loading-spinner"></div>
+  <p>Loading polls…</p>
+</div>
+<div id="pollGrid"></div>
+</div>
+
+<script src="../assets/script.js"></script>
+<script type="module">
+  import { db, getCurrentUser, isMasterAdmin, renderNav, getBase, escHtml } from "../config/app.js";
+  import {
+    collection, getDocs, query, where, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base = getBase();
+  await renderNav();
+
+  const user = await getCurrentUser();
+  if (!user) { window.location.href = base + "/auth/login.html"; }
+
+  document.getElementById("newPollBtn").href = base + "/polls/create_poll.html";
+
+  const master = await isMasterAdmin();
+  if (master) document.getElementById("dashTitle").textContent = "All Polls (Admin)";
+
+  const grid = document.getElementById("pollGrid");
+  document.getElementById("loadingState").style.display = "none";
+
+  let snap;
+  if (master) {
+    snap = await getDocs(
+  query(collection(db,"polls"), where("creator_email","==",user.email), orderBy("created_at","desc"))
+);
+  } else {
+    snap = await getDocs(
+      query(collection(db,"polls"), where("creator_email","==",user.email), orderBy("created_at","desc"))
+    );
+  }
+
+  if (snap.empty) {
+    grid.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">&#128202;</div>
+      <p>No polls yet. <a href="${base}/polls/create_poll.html">Create your first!</a></p>
+    </div>`;
+  } else {
+    grid.innerHTML = `<div class="dash-poll-grid" id="dashGrid"></div>`;
+    const dashGrid = document.getElementById("dashGrid");
+    snap.forEach(d => {
+      const poll  = d.data();
+      const ended = poll.status === "ended" || Date.now() >= poll.end_time.toMillis();
+      const tile  = document.createElement("div");
+      tile.className = `dash-tile ${ended ? "dash-tile-ended" : "dash-tile-active"}`;
+      tile.innerHTML = `
+        <div class="dash-tile-top">
+          <h3 class="dash-tile-title">${escHtml(poll.title)}</h3>
+          <span class="dash-badge ${ended ? "badge-ended" : "badge-active"}">${ended ? "Ended" : "Live"}</span>
+        </div>
+        <p class="dash-tile-q">${escHtml(poll.question)}</p>
+        <div class="dash-tile-meta">
+          Code: <strong>${escHtml(poll.code)}</strong>
+          ${master ? ` &mdash; <span class="dash-creator">${escHtml(poll.creator_email)}</span>` : ""}
+        </div>
+        <div class="dash-tile-actions">
+          <a href="${base}/admin/manage_poll.html?code=${encodeURIComponent(poll.code)}" class="btn btn-primary btn-sm">Manage</a>
+          <a href="${base}/polls/view_poll.html?code=${encodeURIComponent(poll.code)}"   class="btn btn-secondary btn-sm">View</a>
+        </div>`;
+      dashGrid.appendChild(tile);
+    });
+  }
+</script>
+</body>
+</html>

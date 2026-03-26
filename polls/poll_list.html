@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>All Polls &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">All Polls</h1>
+      <p class="page-subtitle">Click any poll to view it. Login required to vote.</p>
+    </div>
+  </div>
+
+  <!-- Quick-jump by code -->
+  <div class="poll-search-bar">
+    <form id="searchForm">
+      <input type="text" id="searchCode" placeholder="Enter 8-digit poll code…" maxlength="8">
+      <button type="submit" class="btn btn-primary">Go</button>
+    </form>
+  </div>
+
+  <div id="loadingState" class="loading-state">
+    <div class="loading-spinner"></div>
+    <p>Loading polls…</p>
+  </div>
+  <div id="pollGrid" class="poll-tile-grid"></div>
+  <div id="emptyState" class="empty-state" style="display:none;">
+    <div class="empty-icon">&#128205;</div>
+    <p>No polls yet. <a id="createLink" href="#">Create the first one!</a></p>
+  </div>
+</div>
+
+<script src="../assets/script.js"></script>
+<script type="module">
+  import { db, renderNav, getBase, escHtml } from "../config/app.js";
+  import {
+    collection, getDocs, query, orderBy, doc, updateDoc, where, Timestamp
+  } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base = getBase();
+  await renderNav();
+  document.getElementById("createLink").href = base + "/polls/create_poll.html";
+
+  // Search by code
+  document.getElementById("searchForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const code = document.getElementById("searchCode").value.trim();
+    if (code) window.location.href = base + "/polls/view_poll.html?code=" + encodeURIComponent(code);
+  });
+
+  // Auto-expire polls whose end_time has passed
+  async function expirePolls() {
+    const now  = Timestamp.now();
+    const snap = await getDocs(
+      query(collection(db, "polls"), where("status","==","active"), where("end_time","<=",now))
+    );
+    for (const d of snap.docs) await updateDoc(d.ref, { status: "ended" });
+  }
+
+  async function loadPolls() {
+    document.getElementById("loadingState").style.display = "none";
+    await expirePolls();
+    const snap = await getDocs(collection(db, "polls"));
+
+    if (snap.empty) {
+      document.getElementById("emptyState").style.display = "block";
+      return;
+    }
+
+    // Sort: active first
+    const polls = snap.docs.map(d => d.data());
+    polls.sort((a, b) => {
+      if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+      const aTime = a.created_at?.toMillis?.() ?? 0;
+      const bTime = b.created_at?.toMillis?.() ?? 0;
+      return bTime - aTime; // newest first within same status
+    });
+
+    const grid = document.getElementById("pollGrid");
+    grid.innerHTML = "";
+
+    for (const poll of polls) {
+      const endTs  = poll.end_time.toMillis();
+      const ended  = poll.status === "ended" || Date.now() >= endTs;
+      const pollUrl = base + "/polls/view_poll.html?code=" + encodeURIComponent(poll.code);
+
+      const tile = document.createElement("div");
+      tile.className = `poll-tile ${ended ? "tile-ended" : "tile-active"}`;
+      tile.setAttribute("role","button"); tile.setAttribute("tabindex","0");
+      tile.addEventListener("click", () => window.location.href = pollUrl);
+
+      tile.innerHTML = `
+        <div class="ptile-top">
+          <h3 class="ptile-title">${escHtml(poll.title)}</h3>
+          <div class="ptile-timer ${ended ? "timer-ended" : ""}"
+               ${!ended ? `data-end="${endTs}"` : ""}>
+            ${ended ? "Ended" : ""}
+          </div>
+        </div>
+        <span class="ptile-badge ${ended ? "badge-ended" : "badge-active"}">
+          ${ended ? "&#9679; Ended" : "&#9679; Live"}
+        </span>
+        <p class="ptile-question">${escHtml(poll.question)}</p>
+        <div class="ptile-bottom">
+          <div class="ptile-code-wrap">
+            <span class="ptile-code-label">Code:</span>
+            <span class="ptile-code">${escHtml(poll.code)}</span>
+            <button class="ptile-copy-btn"  title="Copy code"  onclick="event.stopPropagation();copyToClip('${poll.code}',this)">&#10697;</button>
+            <button class="ptile-share-btn" title="Share link" onclick="event.stopPropagation();shareUrl('${pollUrl}',this)">&#8599;</button>
+          </div>
+        </div>`;
+      grid.appendChild(tile);
+    }
+
+    // Start countdown timers
+    startTimers();
+  }
+
+  function startTimers() {
+    document.querySelectorAll(".ptile-timer[data-end]").forEach(el => {
+      const end = parseInt(el.dataset.end);
+      function tick() {
+        const diff = end - Date.now();
+        if (diff <= 0) { el.textContent = "Ended"; el.classList.add("timer-ended"); return; }
+        const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
+        el.textContent = (h>0?h+"h ":"") + m+"m "+s+"s";
+        setTimeout(tick, 1000);
+      }
+      tick();
+    });
+  }
+
+  loadPolls();
+</script>
+<script>
+  function copyToClip(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const o = btn.innerHTML; btn.innerHTML = "&#10003;"; btn.classList.add("copied");
+      setTimeout(() => { btn.innerHTML = o; btn.classList.remove("copied"); }, 1500);
+    });
+  }
+  function shareUrl(url, btn) {
+    navigator.clipboard.writeText(url).then(() => {
+      const o = btn.innerHTML; btn.innerHTML = "&#10003;"; btn.classList.add("copied");
+      setTimeout(() => { btn.innerHTML = o; btn.classList.remove("copied"); }, 1500);
+    });
+  }
+</script>
+
+</body>
+</html>

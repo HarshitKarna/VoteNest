@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Disqualify Option &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap" id="pageWrap">
+  <p style="text-align:center;margin-top:60px;">Loading…</p>
+</div>
+
+<script type="module">
+  import { db, getCurrentUser, isMasterAdmin, renderNav, getBase, escHtml } from "../config/app.js";
+  import {
+    doc, getDoc, updateDoc, getDocs, query, collection, where, deleteDoc
+  } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base     = getBase();
+  const params   = new URLSearchParams(window.location.search);
+  const optionId = params.get("id")?.trim()   || "";
+  const pollCode = params.get("poll")?.trim()  || "";
+
+  await renderNav();
+  const user = await getCurrentUser();
+  if (!user) { window.location.href = base + "/auth/login.html"; }
+
+  const wrap = document.getElementById("pageWrap");
+
+  if (!optionId || !pollCode) { wrap.innerHTML = "<p>Invalid request.</p>"; throw new Error(); }
+
+  const optSnap  = await getDoc(doc(db, "options", optionId));
+  const pollSnap = await getDoc(doc(db, "polls",   pollCode));
+  if (!optSnap.exists() || !pollSnap.exists()) { wrap.innerHTML = "<p>Not found.</p>"; throw new Error(); }
+
+  const option = optSnap.data();
+  const poll   = pollSnap.data();
+  const master = await isMasterAdmin();
+
+  if (!master && poll.creator_email !== user.email) {
+    wrap.innerHTML = "<p>Access denied.</p>"; throw new Error();
+  }
+
+  wrap.innerHTML = `
+    <div class="disq-page-card">
+      <h2 class="disq-page-title">&#9940; Disqualify Option</h2>
+      <p class="disq-option-name">Option: <strong>${escHtml(option.option_text)}</strong></p>
+      <p class="disq-warning">&#9888; This removes all votes for this option and cannot be undone.</p>
+      <div class="auth-error" id="disqError" style="display:none;"></div>
+      <form id="disqForm" class="disq-form">
+        <div class="form-group">
+          <label class="form-label">Reason for disqualification</label>
+          <textarea id="reason" class="form-input" rows="3" placeholder="Explain why…" required></textarea>
+        </div>
+        <div class="disq-form-btns">
+          <a href="${base}/admin/manage_poll.html?code=${encodeURIComponent(pollCode)}" class="btn btn-secondary">Cancel</a>
+          <button type="submit" class="btn btn-danger" id="disqBtn">Confirm Disqualify</button>
+        </div>
+      </form>
+    </div>`;
+
+  document.getElementById("disqForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const reason  = document.getElementById("reason").value.trim();
+    const errBox  = document.getElementById("disqError");
+    if (!reason) { errBox.textContent = "Please provide a reason."; errBox.style.display = "block"; return; }
+
+    const btn = document.getElementById("disqBtn");
+    btn.textContent = "Processing…"; btn.disabled = true;
+
+    try {
+      // Mark option as disqualified
+      await updateDoc(doc(db,"options",optionId), {
+        is_disqualified:  true,
+        disqualify_reason: reason
+      });
+
+      // Delete all votes for this option
+      const votesSnap = await getDocs(
+        query(collection(db,"votes"), where("option_id","==",optionId))
+      );
+      for (const v of votesSnap.docs) await deleteDoc(v.ref);
+
+      window.location.href = base + "/admin/manage_poll.html?code=" + encodeURIComponent(pollCode);
+    } catch (err) {
+      errBox.textContent   = "Error: " + err.message;
+      errBox.style.display = "block";
+      btn.textContent = "Confirm Disqualify"; btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

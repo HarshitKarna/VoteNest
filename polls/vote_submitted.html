@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vote Submitted &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap">
+  <div class="submitted-card">
+    <div class="submitted-icon">&#128499;</div>
+    <h2 class="submitted-title">Vote Submitted!</h2>
+    <p class="submitted-msg">Thank you for participating. Your vote has been recorded.</p>
+    <a id="viewPollLink" href="#" class="btn btn-primary">View Poll</a>
+    <a id="browseLink"   href="#" class="btn btn-secondary">Browse Polls</a>
+  </div>
+</div>
+
+<script type="module">
+  import { renderNav, getBase } from "../config/app.js";
+  const base = getBase();
+  const code = new URLSearchParams(window.location.search).get("code") || "";
+  await renderNav();
+  document.getElementById("viewPollLink").href = base + "/polls/view_poll.html?code=" + encodeURIComponent(code);
+  document.getElementById("browseLink").href   = base + "/polls/poll_list.html";
+</script>
+</body>
+</html>

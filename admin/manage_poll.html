@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage Poll &mdash; VoteNest</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+<nav class="navbar" id="mainNav"></nav>
+<div class="nav-mobile-menu" id="mobileMenu"></div>
+
+<div class="page-wrap" id="pageWrap">
+  <p style="text-align:center;margin-top:60px;">Loading…</p>
+</div>
+
+<script src="../assets/script.js"></script>
+<script type="module">
+  import { db, getCurrentUser, isMasterAdmin, renderNav, getBase, escHtml } from "../config/app.js";
+  import {
+    doc, getDoc, collection, getDocs, query, where,
+    updateDoc, deleteDoc, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+
+  const base   = getBase();
+  const params = new URLSearchParams(window.location.search);
+  const code   = params.get("code")?.trim() || "";
+
+  await renderNav();
+
+  const user = await getCurrentUser();
+  if (!user) { window.location.href = base + "/auth/login.html"; }
+
+  const wrap = document.getElementById("pageWrap");
+
+  if (!code) { wrap.innerHTML = "<p>No poll code.</p>"; throw new Error(); }
+
+  const pollSnap = await getDoc(doc(db, "polls", code));
+  if (!pollSnap.exists()) { wrap.innerHTML = "<p>Poll not found.</p>"; throw new Error(); }
+
+  const poll    = pollSnap.data();
+  const master  = await isMasterAdmin();
+
+  if (!master && poll.creator_email !== user.email) {
+    wrap.innerHTML = "<p>Access denied.</p>"; throw new Error();
+  }
+
+  const isEnded = poll.status === "ended" || Date.now() >= poll.end_time.toMillis();
+
+  // Load options with vote counts
+  const optSnap   = await getDocs(query(collection(db,"options"), where("poll_code","==",code)));
+  const votesSnap = await getDocs(query(collection(db,"votes"),   where("poll_code","==",code)));
+
+  const voteCounts = {};
+  votesSnap.forEach(v => {
+    const oid = v.data().option_id;
+    voteCounts[oid] = (voteCounts[oid]||0) + 1;
+  });
+
+  let options = optSnap.docs.map(d => ({ id: d.id, ...d.data(), votes: voteCounts[d.id]||0 }));
+  options.sort((a,b) => b.votes - a.votes);
+
+  const totalVotes = options.filter(o=>!o.is_disqualified).reduce((s,o)=>s+o.votes,0);
+
+  const voters = votesSnap.docs.map(d => d.data()).sort((a,b) =>
+    b.voted_at?.toMillis() - a.voted_at?.toMillis());
+
+  // ── Build page ─────────────────────────────────────────────────────────────
+  document.title = "Manage: " + poll.title;
+  const endTs = poll.end_time.toMillis();
+
+  wrap.innerHTML = `
+    <div class="manage-header-card">
+      <div class="manage-title-row">
+        <div>
+          <h1 class="manage-title">${escHtml(poll.title)}</h1>
+          <p class="manage-question">${escHtml(poll.question)}</p>
+          <span class="manage-code">Code: <strong>${escHtml(poll.code)}</strong></span>
+        </div>
+        <div class="manage-actions">
+          <button id="endDeleteBtn" class="btn ${isEnded ? "btn-danger" : "btn-warning"}">
+            ${isEnded ? "&#128465; Delete" : "&#9209; End Poll"}
+          </button>
+          <a href="${base}/polls/view_poll.html?code=${encodeURIComponent(code)}" class="btn btn-secondary">View</a>
+          <a href="${base}/admin/dashboard.html" class="btn btn-secondary">&#8592; Back</a>
+        </div>
+      </div>
+      <div class="manage-stats">
+        <div class="stat-pill">Votes: <strong>${totalVotes}</strong></div>
+        <div class="stat-pill">Options: <strong>${options.length}</strong></div>
+        <div class="stat-pill">
+          ${isEnded ? "Ended" : `<span id="mgCountdown" data-end="${endTs}">…</span>`}
+        </div>
+      </div>
+    </div>
+
+    <h3 class="section-heading">Results</h3>
+    <div class="manage-options-grid" id="optionsGrid"></div>
+
+    <h3 class="section-heading">Voters (${voters.length})</h3>
+    <div class="voters-list" id="votersList"></div>`;
+
+  // Countdown
+  const mgEl = document.getElementById("mgCountdown");
+  if (mgEl) {
+    const end = parseInt(mgEl.dataset.end);
+    (function tick() {
+      const d = end - Date.now();
+      if (d <= 0) { mgEl.textContent = "Ended"; return; }
+      const h=Math.floor(d/3600000), m=Math.floor((d%3600000)/60000), s=Math.floor((d%60000)/1000);
+      mgEl.textContent = (h>0?h+"h ":"")+m+"m "+s+"s";
+      setTimeout(tick,1000);
+    })();
+  }
+
+  // End / Delete button
+  document.getElementById("endDeleteBtn").addEventListener("click", async () => {
+    if (!confirm("Are you sure?")) return;
+    if (!isEnded) {
+      await updateDoc(doc(db,"polls",code), { status:"ended" });
+      window.location.reload();
+    } else {
+      // Delete votes, options, then poll
+      for (const v of votesSnap.docs) await deleteDoc(v.ref);
+      for (const o of optSnap.docs)   await deleteDoc(o.ref);
+      await deleteDoc(doc(db,"polls",code));
+      window.location.href = base + "/admin/dashboard.html";
+    }
+  });
+
+  // Options grid
+  const grid    = document.getElementById("optionsGrid");
+  const trophies = ["&#127942;","&#129352;","&#129353;"];
+  options.forEach((opt, i) => {
+    const pct      = totalVotes > 0 && !opt.is_disqualified ? Math.round((opt.votes/totalVotes)*100) : 0;
+    const barClass = opt.is_disqualified ? "bg-dark" : (i===0?"bg-gold":i===1?"bg-blue":"bg-teal");
+    const trophy   = opt.is_disqualified ? "&#9940;" : (trophies[i] ?? (i+1)+".");
+    const tile     = document.createElement("div");
+    tile.className = `manage-option-tile ${opt.is_disqualified?"disq-tile":i===0&&isEnded?"winner-tile":""}`;
+    tile.innerHTML = `
+      <div class="mot-header">
+        <span class="mot-rank">${trophy}</span>
+        <span class="mot-name">${escHtml(opt.option_text)}</span>
+        <span class="mot-votes">${opt.is_disqualified ? "DQ" : opt.votes+" votes"}</span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar ${barClass}" style="width:${opt.is_disqualified?100:pct}%">
+          ${opt.is_disqualified ? "Disqualified" : pct+"%"}
+        </div>
+      </div>
+      ${opt.is_disqualified
+        ? `<p class="disq-reason"><em>Reason: ${escHtml(opt.disqualify_reason||"")}</em></p>`
+        : `<a href="${base}/admin/disqualify_option.html?id=${opt.id}&poll=${encodeURIComponent(code)}"
+              class="btn btn-danger btn-sm disq-btn">Disqualify</a>`}`;
+    grid.appendChild(tile);
+  });
+
+  // Voters list
+  const votersList = document.getElementById("votersList");
+  if (voters.length === 0) {
+    votersList.innerHTML = `<p class="no-voters">No votes yet.</p>`;
+  } else {
+    voters.forEach(v => {
+      const row = document.createElement("div");
+      row.className = "voter-row";
+      const ts = v.voted_at?.toDate ? v.voted_at.toDate() : new Date();
+      row.innerHTML = `
+        <span class="voter-email">&#128100; ${escHtml(v.user_email)}</span>
+        <span class="voter-time">${ts.toLocaleString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"})}</span>`;
+      votersList.appendChild(row);
+    });
+  }
+</script>
+</body>
+</html>

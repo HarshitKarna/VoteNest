@@ -1,4 +1,5 @@
 Hey there, this project is made using HTML, CSS, JS (DA BIG BOI HERE), and firebase as database. The authentication is also handled by firebase. Previously, this was a PHP + mySQL project, but it was migrated to firebase and JS so that it can run using the github link: "https://harshitkarna.github.io/VoteNest/"
+If you are looking for the PHP + mySQL version: "https://github.com/HKK901/901_VotingProj" (only source code)
 Also, not very important but, there is a master admin user id with capability to edit all polls, even if they didnt create it.
 
 ---------------------------------------------------------------------------------------------------
